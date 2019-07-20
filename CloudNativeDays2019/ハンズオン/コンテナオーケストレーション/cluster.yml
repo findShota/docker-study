@@ -1,0 +1,20 @@
+# 拡張子が.yamlだとRKEに怒られる
+nodes:
+    - address: 34.85.71.141
+      user: hshota28
+      role:
+        - controlplane
+        - etcd
+        - worker
+    - address: 34.85.71.60
+      user: hshota28
+      role:
+        - worker
+    - address: 35.194.125.79
+      user: hshota28
+      role:
+        - worker
+network:
+    plugin: canal
+ingress:
+    provider: nginx
