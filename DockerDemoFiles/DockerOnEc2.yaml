@@ -1,0 +1,144 @@
+###############################################
+# 概要
+# Dockerをインストール済みのEC2とVPC及びSSMアクセスするためのロール等を作成します
+# 東京リージョンを想定しています
+###############################################
+
+AWSTemplateFormatVersion: '2010-09-09'
+
+###############################################
+# Parameters
+###############################################
+Parameters:
+  ProjectName:
+    Type: String
+    Default: DockerDemo
+
+  # EC2インスタンス用のキーペアはEC2マネジメントコンソールで事前に作成し、キーペア名を入力してください
+  EC2KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+
+###############################################
+# Resources
+###############################################
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/25
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-igw
+
+  IgwAttachVpc:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: 'ap-northeast-1a'
+      CidrBlock: 10.0.0.0/27
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-subnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-rtb
+
+  RouteAddInternet:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  AssociatePublicSubnet1ToPublicRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  Ec2Securitygroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-ec2-sg
+      GroupDescription: !Sub ${ProjectName}-ec2-sg
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ec2-sg
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: '0.0.0.0/0'
+
+  Ec2onDocker:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: ap-northeast-1a
+      ImageId: ami-0d7ed3ddb85b521a6
+      InstanceType: t2.micro
+      KeyName: !Ref EC2KeyPair
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: 10
+      SecurityGroupIds:
+        - !Ref Ec2Securitygroup
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ec2
+      IamInstanceProfile: !Ref Ec2IAMInstanceProfile
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum update -y
+          yum install -y docker
+          systemctl enable docker
+          service docker start
+
+  Ec2RoleForSSM:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+
+  Ec2IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref Ec2RoleForSSM
