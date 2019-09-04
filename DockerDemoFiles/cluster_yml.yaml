@@ -1,0 +1,20 @@
+cloud_provider:
+  name: aws
+
+nodes:
+  - address: ec2～～～.ap-northeast-1.compute.amazonaws.com
+    user: ec2-user
+    role:
+    - controlplane
+    - etcd
+    ssh_key_path: /home/ec2-user/.ssh/key.pem
+  - address: ec2～～～.ap-northeast-1.compute.amazonaws.com
+    user: ec2-user
+    role:
+    - worker
+    ssh_key_path: /home/ec2-user/.ssh/key.pem
+  - address: ec2～～～.ap-northeast-1.compute.amazonaws.com
+    user: ec2-user
+    role:
+    - worker
+    ssh_key_path: /home/ec2-user/.ssh/key.pem
